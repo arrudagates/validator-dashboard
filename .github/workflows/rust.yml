@@ -1,0 +1,41 @@
+name: Checks
+
+on:
+  push:
+    branches: [ master ]
+  pull_request:
+    branches: [ master ]
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v2
+    - uses: jetli/trunk-action@v0.1.0
+    - name: Add wasm32 target
+      run: rustup target add wasm32-unknown-unknown
+    - name: Build
+      run: trunk build
+      
+  test:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v2
+    - name: Run tests
+      run: cargo test --verbose
+      
+  clippy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v2
+      - name: Run clippy
+        run: cargo clippy -- -D warnings
+  fmt:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v2
+      - name: Run cargofmt
+        run: cargo fmt --all -- --check
