@@ -1,0 +1,17 @@
+[package]
+name = "validator-dashboard"
+authors = ['Gabriel Facco de Arruda <https://github.com/arrudagates>']
+version = "0.1.0"
+edition = "2018"
+
+
+[dependencies]
+yew = "0.18.0"
+yew-router = "*"
+anyhow = "*"
+sp-core = { git = "https://github.com/paritytech/substrate.git",tag = "monthly-2021-09+1", default-features = false, features = ["full_crypto"] }
+hex = "*"
+codec = { package = 'parity-scale-codec', version = "2.0.0", default-features = false,  features = ['derive']}
+separator = "0.3.1"
+instant = { version = "0.1", features = [ "now", "inaccurate", "wasm-bindgen" ] }
+substate = { git = "https://github.com/arrudagates/substate", branch = "master" }
