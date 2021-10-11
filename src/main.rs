@@ -59,9 +59,20 @@ impl Component for Model {
         let route_service: RouteService<()> = RouteService::new();
         let route = route_service.get_route();
 
-        let (account, format) = address_to_accountid(match route.as_str() {
-            "/" => "esqyGXvN7eezFoGtXAiLvXNnai2KFWkt7VfWwywHNBdwb8dUh",
-            _ => route.trim_start_matches('/').trim(),
+        yew::services::ConsoleService::info(route.as_str());
+
+        yew::services::ConsoleService::info(
+            format!("{:?}", route.rsplit('/').collect::<Vec<&str>>()).as_str(),
+        );
+
+        yew::services::ConsoleService::info(route.rsplit('/').collect::<Vec<&str>>()[0]);
+
+        let final_path = route.rsplit('/').collect::<Vec<&str>>()[0];
+
+        let (account, format) = address_to_accountid(if final_path.is_empty() {
+            "esqyGXvN7eezFoGtXAiLvXNnai2KFWkt7VfWwywHNBdwb8dUh"
+        } else {
+            final_path
         })
         .unwrap();
         Self {
@@ -79,7 +90,7 @@ impl Component for Model {
             current_session: 0u32,
             account,
             format,
-            home: route.as_str() == "/",
+            home: final_path.is_empty(),
             in_set: false,
             blocks: 0u32,
             era_epoch: (0u64, 0f64),
