@@ -58,6 +58,8 @@ impl Component for Model {
     fn create(_props: Self::Properties, link: ComponentLink<Self>) -> Self {
         let route_service: RouteService<()> = RouteService::new();
         let route = route_service.get_route();
+        
+        yew::services::ConsoleService::info(route.as_str());
 
         yew::services::ConsoleService::info(route.as_str());
 
