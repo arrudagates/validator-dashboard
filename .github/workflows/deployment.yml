@@ -18,8 +18,8 @@ jobs:
       - uses: jetli/wasm-bindgen-action@v0.1.0
 
       - uses: actions/checkout@v2
-
-      - run: trunk build --release && cp ./dist/index.html ./dist/404.html
+      
+      - run: trunk build --release && cp ./dist/index.html ./dist/404.html && echo validatordash.ml > ./dist/CNAME
 
       - uses: peaceiris/actions-gh-pages@v3
         if: ${{ github.ref == 'refs/heads/master' }}
