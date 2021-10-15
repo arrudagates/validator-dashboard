@@ -1,7 +1,10 @@
 use codec::{Decode, Encode};
 use separator::FixedPlaceSeparatable;
 use sp_core::crypto::{AccountId32, Ss58AddressFormat};
-use std::collections::BTreeMap;
+use std::{
+    collections::BTreeMap,
+    sync::{Arc, Mutex},
+};
 use substate::{
     storage_key,
     utils::{accountid_to_address, address_to_accountid},
@@ -16,6 +19,7 @@ use yew_router::prelude::RouteService;
 enum Msg {
     WS(Result<String, anyhow::Error>),
     Wss(WebSocketStatus),
+    Tel(Result<Vec<u8>, anyhow::Error>),
 }
 
 enum WsMsg {
@@ -32,6 +36,7 @@ enum WsMsg {
 
 struct Model {
     ws: WebSocketTask,
+    ws_telemetry: Arc<Mutex<Option<WebSocketTask>>>,
     total: u128,
     own: u128,
     nominators: Vec<IndividualExposure>,
@@ -47,8 +52,9 @@ struct Model {
     points: (u32, u32),
     last_reward: (u128, u128),
     current_reward: u128,
-    _up: bool,
+    up: bool,
     home: bool,
+    validator_name: Option<String>,
 }
 
 impl Component for Model {
@@ -59,22 +65,33 @@ impl Component for Model {
         let route_service: RouteService<()> = RouteService::new();
         let route = route_service.get_route();
 
-        yew::services::ConsoleService::info(route.as_str());
+        let (validator_name, final_path) = {
+            let route = if route.find('?').is_none() {
+                format!("{}?", route)
+            } else {
+                String::from(route.as_str())
+            };
+            let v = route
+                .rsplit(|c| c == '/' || c == '?')
+                .map(|x| {
+                    if x.is_empty() {
+                        None
+                    } else {
+                        Some(String::from(x))
+                    }
+                })
+                .collect::<Vec<Option<String>>>();
 
-        yew::services::ConsoleService::info(
-            format!("{:?}", route.rsplit('/').collect::<Vec<&str>>()).as_str(),
-        );
+            (v[0].clone(), v[1].clone())
+        };
 
-        yew::services::ConsoleService::info(route.rsplit('/').collect::<Vec<&str>>()[0]);
-
-        let final_path = route.rsplit('/').collect::<Vec<&str>>()[0];
-
-        let (account, format) = address_to_accountid(if final_path.is_empty() {
-            "esqyGXvN7eezFoGtXAiLvXNnai2KFWkt7VfWwywHNBdwb8dUh"
+        let (account, format) = address_to_accountid(if let Some(ref account) = final_path {
+            account.as_str()
         } else {
-            final_path
+            "esqyGXvN7eezFoGtXAiLvXNnai2KFWkt7VfWwywHNBdwb8dUh"
         })
         .unwrap();
+
         Self {
             total: 0u128,
             own: 0u128,
@@ -85,12 +102,20 @@ impl Component for Model {
                 link.callback(Msg::Wss),
             )
             .unwrap(),
+            ws_telemetry: Arc::new(Mutex::new(Some(
+                WebSocketService::connect_binary(
+                    "wss://feed.telemetry.polkadot.io/feed",
+                    link.callback(Msg::Tel),
+                    link.callback(Msg::Wss),
+                )
+                .unwrap(),
+            ))),
             current_msg: WsMsg::None,
             current_era: 0u32,
             current_session: 0u32,
             account,
             format,
-            home: final_path.is_empty(),
+            home: final_path.is_none(),
             in_set: false,
             blocks: 0u32,
             era_epoch: (0u64, 0f64),
@@ -98,7 +123,8 @@ impl Component for Model {
             points: (0u32, 0u32),
             last_reward: (0u128, 0u128),
             current_reward: 0u128,
-            _up: false,
+            up: false,
+            validator_name,
         }
     }
     fn update(&mut self, msg: Self::Message) -> ShouldRender {
@@ -110,6 +136,23 @@ impl Component for Model {
         }
 
         match msg {
+            Msg::Tel(msg) => {
+                let msg = msg.unwrap();
+
+                let msg = String::from_utf8(msg).unwrap();
+
+                if msg.contains(if let Some(name) = &self.validator_name {
+                    name
+                } else {
+                    "Gabe's Validator"
+                }) {
+                    self.up = true;
+                    self.ws_telemetry = Arc::new(Mutex::new(None));
+                }
+
+                true
+            }
+
             Msg::WS(msg) => {
                 let msg = msg.unwrap();
 
@@ -214,6 +257,14 @@ impl Component for Model {
                             as u128
                             * self.last_reward.1)
                             / context.total as u128;
+
+                        if self.home || self.validator_name.is_some() {
+                            if let Some(ws) = &mut *self.ws_telemetry.lock().unwrap() {
+                                ws.send(Ok(String::from(
+                                "subscribe:0x3920bcb4960a1eef5580cd5367ff3f430eef052774f78468852f7b9cb39f8a3c",
+                            )));
+                            }
+                        }
                     }
                     WsMsg::Validators => {
                         self.in_set = Vec::decode(&mut slice)
@@ -267,13 +318,17 @@ impl Component for Model {
             <section class="section" style="height: 100vh; padding-top: 1rem;">
                 <div style="display: flex;flex-direction: column;flex-wrap: wrap-reverse;width: 100%;height: 5%;margin-bottom: 1.5rem;">
 
-                // TODO: Indicator of node being up
-                //<div style="margin-right: 0;width: 2%;text-align: center; height: 100%; top: 50%;" class={format!("tile notification is-{} is-ancestor", if self.up { "success" } else { "danger" })}>
-                //<p style="align-self: center;">{ if self.up { "👍" } else { "👎" } }</p>
-            //</div>
+                { if self.home || self.validator_name.is_some() { html!{
+                <div style="margin-right: 0;width: 2%;text-align: center; height: 100%; top: 50%;" class={format!("tile notification is-{} is-ancestor", if self.up { "success" } else { "danger" })}>
+               <p style="align-self: center;">{ if self.up { "👍" } else { "👎" } }</p>
+                        </div>
+                }
+                }
+                  else { html!{ <div></div> } }
+                }
                 <div></div>
 
-                <h1 style="" class="title is-1 has-text-centered">{ if self.home { "Gabe's Validator" } else { "Validator Dashboard" } }</h1>
+            <h1 style="" class="title is-1 has-text-centered">{ if self.home { "Gabe's Validator" } else if let Some(name) = &self.validator_name { name } else { "Validator Dashboard" } }</h1>
                 <div></div>
                 </div>
                 <div class="tile is-ancestor" style="height: 95%;">
@@ -383,7 +438,7 @@ fn main() {
 }
 
 #[derive(PartialEq, Eq, PartialOrd, Ord, Clone, Encode, Decode)]
-pub struct IndividualExposure {
+struct IndividualExposure {
     /// The stash account of the nominator in question.
     pub who: AccountId32,
     /// Amount of funds exposed.
@@ -393,7 +448,7 @@ pub struct IndividualExposure {
 
 /// A snapshot of the stake backing a single validator in the system.
 #[derive(PartialEq, Eq, PartialOrd, Ord, Clone, Encode, Decode, Default)]
-pub struct Exposure {
+struct Exposure {
     /// The total balance backing this validator.
     #[codec(compact)]
     pub total: u128,
@@ -405,7 +460,7 @@ pub struct Exposure {
 }
 
 #[derive(Encode, Decode)]
-pub struct ActiveEraInfo {
+struct ActiveEraInfo {
     /// Index of era.
     pub index: u32,
     /// Moment of start expressed as millisecond from `$UNIX_EPOCH`.
@@ -416,7 +471,7 @@ pub struct ActiveEraInfo {
 }
 
 #[derive(PartialEq, Encode, Decode, Default)]
-pub struct EraRewardPoints {
+struct EraRewardPoints {
     /// Total number of points. Equals the sum of reward points for each validator.
     total: u32,
     /// The reward points earned by a given validator.
