@@ -77,7 +77,7 @@ impl Component for Model {
                     if x.is_empty() {
                         None
                     } else {
-                        Some(String::from(x))
+                        Some(String::from(x.replace("%27", "'").replace("%20", " ")))
                     }
                 })
                 .collect::<Vec<Option<String>>>();
